@@ -1,13 +1,12 @@
 import streamlit as st
-from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch
+from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
 
-# Load the model and tokenizer from Hugging Face
-@st.cache_resource  # Cache the model and tokenizer for faster loading
+# Load the model and tokenizer
+@st.cache_resource
 def load_model():
-    model_name = "microsoft/DialoGPT-small"  # You can use other models here
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model_name = "facebook/blenderbot-400M-distill"
+    tokenizer = BlenderbotTokenizer.from_pretrained(model_name)
+    model = BlenderbotForConditionalGeneration.from_pretrained(model_name)
     return tokenizer, model
 
 tokenizer, model = load_model()
@@ -25,16 +24,20 @@ if "chat_history" not in st.session_state:
 
 # Process the user input and generate a response
 if user_input:
-    # Tokenize and encode user input with the model's tokenizer
-    inputs = tokenizer.encode(user_input + tokenizer.eos_token, return_tensors="pt")
-
-    # Concatenate chat history with user input
-    chat_history_ids = torch.cat([torch.tensor(st.session_state.chat_history), inputs], dim=-1) if st.session_state.chat_history else inputs
-
+    # Tokenize and encode the user input along with chat history
+    inputs = tokenizer(user_input, return_tensors="pt")
+    
     # Generate a response from the model
-    response_ids = model.generate(chat_history_ids, max_length=1000, pad_token_id=tokenizer.eos_token_id)
-    response = tokenizer.decode(response_ids[:, chat_history_ids.shape[-1]:][0], skip_special_tokens=True)
+    reply_ids = model.generate(**inputs)
+    response = tokenizer.decode(reply_ids[0], skip_special_tokens=True)
 
-    # Update chat history and display response
-    st.session_state.chat_history.append(inputs)
-    st.write("🤖 Chatbot:", response)
+    # Display response
+    st.session_state.chat_history.append(user_input)
+    st.session_state.chat_history.append(response)
+    
+    # Display conversation history
+    for i, message in enumerate(st.session_state.chat_history):
+        if i % 2 == 0:
+            st.write(f"**You:** {message}")
+        else:
+            st.write(f"🤖 **Chatbot:** {message}")
